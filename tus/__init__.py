@@ -25,9 +25,12 @@ class Zope2RequestAdapter(object):
         return self.req.getHeader(name)
 
     def set_response_code(self, code, status=None):
-        self.req.response.code = code
-        if status is not None:
-            self.req.response.status = status
+        self.req.response.setStatus(code, status)
+        if status:
+            self.req.response.body = status
+        else:
+            # Zope2 requires some kind of body or it'll rewrite the status
+            self.req.respond.body = 'foobar'
 
     def set_header(self, name, value):
         self.req.response.setHeader(name, value)
@@ -138,9 +141,20 @@ class Tus(object):
         uid = self.get_uid()
         length = self.get_current_offset(uid)
         if length == -1:
-            raise TusException('Not a valid file id')
+            self.req.set_response_code(404, 'Not Found')
+            return
+        elif length == self.get_end_length(uid):
+            # huh, already done
+            self.finished(uid)
         self.req.set_header('Offset', str(length))
         self.req.set_response_code(200, 'OK')
+
+    def finished(self, uid):
+        self.upload_finished = True
+        if self.send_file:
+            self.req.set_request_body(open(self.get_filepath()))
+        else:
+            self.req.set_request_body(self.get_filepath())
 
     def patch(self):
         uid = self.get_uid()
@@ -151,11 +165,7 @@ class Tus(object):
             raise TusException("no content body")
 
         if self.write_data(uid, offset, fi):
-            self.upload_finished = True
-            if self.send_file:
-                self.req.set_request_body(open(self.get_filepath()))
-            else:
-                self.req.set_request_body(self.get_filepath())
+            self.finished(uid)
         self.req.set_response_code(200, 'OK')
 
     def get_current_offset(self, uid):
@@ -186,6 +196,19 @@ class Tus(object):
         fi.close()
         return uid
 
+    def get_end_length(self, uid=None):
+        if uid is None:
+            uid = self.get_uid()
+        path = os.path.join(self.tmp_file_dir, uid)
+        infopath = path + '.length'
+        if not os.path.exists(infopath):
+            # XXX handle
+            raise TusException('no length file written')
+        fi = open(infopath)
+        end_length = int(fi.read())
+        fi.close()
+        return end_length
+
     def write_data(self, uid, offset, data):
         path = os.path.join(self.tmp_file_dir, uid)
         if offset and not os.path.exists(path):
@@ -211,13 +234,10 @@ class Tus(object):
         length = fi.tell()
         fi.close()
 
-        infopath = path + '.length'
-        if not os.path.exists(infopath):
-            # XXX handle
-            raise TusException('no length file written')
-        fi = open(infopath)
-        end_length = int(fi.read())
+        end_length = self.get_end_length(uid)
+
         # touch length file so it doesn't get "cleaned" up
+        infopath = path + '.length'
         with file(infopath, 'a'):
             os.utime(infopath, None)
 

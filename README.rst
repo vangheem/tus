@@ -17,7 +17,7 @@ send_file
     by default, it'll only send the filename in the request body,
     not an actual file upload
 upload_valid_duration
-    how long before you cleanup old uploads in minutes
+    how long before you cleanup old uploads in seconds
 
 
 Basics
