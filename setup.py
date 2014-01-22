@@ -26,6 +26,7 @@ setup(name='tus',
       include_package_data=True,
       zip_safe=False,
       install_requires=requires,
+      license='License :: OSI Approved :: GNU General Public License v2 (GPLv2)',
       extras_require={
           'test': [
               'WebOb',
