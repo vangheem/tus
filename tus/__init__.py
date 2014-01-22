@@ -2,6 +2,11 @@ import uuid
 import os
 import time
 from StringIO import StringIO
+import string
+valid_chars = "-_.() %s%s" % (string.ascii_letters, string.digits)
+import posixpath
+_os_alt_seps = list(sep for sep in [os.path.sep, os.path.altsep]
+                    if sep not in (None, '/'))
 
 
 class TusException(Exception):
@@ -87,6 +92,22 @@ class WebobAdapter(object):
             self.req.body = value
         else:
             self.req.body_file = value
+
+
+def safe_join(directory, filename):
+    """Safely join `directory` and `filename`.  If this cannot be done,
+    this function returns ``None``.
+
+    :param directory: the base directory.
+    :param filename: the untrusted filename relative to that directory.
+    """
+    filename = posixpath.normpath(filename)
+    for sep in _os_alt_seps:
+        if sep in filename:
+            return None
+    if os.path.isabs(filename) or filename.startswith('../'):
+        return None
+    return os.path.join(directory, filename)
 
 
 class Tus(object):
@@ -177,7 +198,7 @@ class Tus(object):
     def get_filepath(self, uid=None):
         if uid is None:
             uid = self.get_uid()
-        return os.path.join(self.tmp_file_dir, uid)
+        return safe_join(self.tmp_file_dir, uid)
 
     def create_file(self, length):
         """
@@ -199,7 +220,7 @@ class Tus(object):
     def get_end_length(self, uid=None):
         if uid is None:
             uid = self.get_uid()
-        path = os.path.join(self.tmp_file_dir, uid)
+        path = safe_join(self.tmp_file_dir, uid)
         infopath = path + '.length'
         if not os.path.exists(infopath):
             # XXX handle
@@ -210,7 +231,7 @@ class Tus(object):
         return end_length
 
     def write_data(self, uid, offset, data):
-        path = os.path.join(self.tmp_file_dir, uid)
+        path = safe_join(self.tmp_file_dir, uid)
         if offset and not os.path.exists(path):
             # XXX hmmm, assuming file exists, error?
             raise Exception()
@@ -246,10 +267,10 @@ class Tus(object):
     def cleanup_file(self, uid=None):
         if uid is None:
             uid = self.get_uid()
-        filepath = os.path.join(self.tmp_file_dir, uid)
+        filepath = safe_join(self.tmp_file_dir, uid)
         if os.path.exists(filepath):
             os.remove(filepath)
-        length_filepath = os.path.join(self.tmp_file_dir, uid + '.length')
+        length_filepath = safe_join(self.tmp_file_dir, uid + '.length')
         if os.path.exists(length_filepath):
             os.remove(length_filepath)
 
