@@ -10,7 +10,7 @@ requires = [
 ]
 
 setup(name='tus',
-      version='1.0',
+      version='1.0a1',
       description='tus',
       long_description=README + '\n\n' + CHANGES,
       classifiers=[
